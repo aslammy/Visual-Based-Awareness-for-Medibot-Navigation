@@ -1,0 +1,114 @@
+# Visual-based Awareness for Medibot Navigation
+# Syed Muhammad Aslam bin Syed Mohd Azizi
+# 1719977
+# Generate keypoints, calculate number of raw matches, show what is being matched,
+
+# import the necessary packages
+import cv2
+import numpy as np
+import imutils
+import imageio
+import matplotlib.pyplot as plt
+
+fileName1 = "5R.PNG"
+fileName2 = "5L.PNG"
+
+feature_extractor = 'sift'                          # define descriptor to use
+
+feature_matching = 'knn'                            # define matcher to use
+
+trainImg = imageio.imread(fileName2)
+trainImg_gray = cv2.cvtColor(trainImg, cv2.COLOR_RGB2GRAY)          # convert to grayscale
+
+queryImg = imageio.imread(fileName1)
+queryImg_gray = cv2.cvtColor(queryImg, cv2.COLOR_RGB2GRAY)          # convert to grayscale
+
+fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, constrained_layout=False)
+ax1.imshow(trainImg, cmap="gray")
+ax1.set_xlabel("left", fontsize=14)
+
+ax2.imshow(queryImg, cmap="gray")
+ax2.set_xlabel("right", fontsize=14)
+
+#plt.show()                                         # show left and right original images
+
+
+def detectAndDescribe(image, method='orb'):         # function to extract features
+
+    if method == 'brisk':                           # example using BRISK descriptor
+        descriptor = cv2.BRISK_create()
+
+    elif method == 'orb':                           # example using ORB descriptor
+        descriptor = cv2.ORB_create()
+
+    elif method == 'sift':                          # example using SIFT descriptor
+        descriptor = cv2.SIFT_create()
+
+    (kp, feature) = descriptor.detectAndCompute(image, None)        # extracting the keypoints
+
+    return (kp, feature)
+
+
+kp1, featureA = detectAndDescribe(trainImg_gray, method=feature_extractor)          # calling function detectAndDescribe
+kp2, featureB = detectAndDescribe(queryImg_gray, method=feature_extractor)
+
+fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(20,8), constrained_layout=False)
+ax1.imshow(cv2.drawKeypoints(trainImg_gray, kp1, None, color=(0,255,0)))
+ax1.set_xlabel('left', fontsize = 14)
+
+ax2.imshow(cv2.drawKeypoints(queryImg_gray, kp2, None, color=(0,255,0)))
+ax2.set_xlabel('right', fontsize = 14)
+
+#plt.show()                                         # show keypoints detected in grayscale images
+
+
+def createMatcher(method, crossCheck):              # function to match the keypoints
+
+    if method == 'sift' or method == 'surf':        # if our descriptor is SIFT or SURF
+        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=crossCheck)
+
+    elif method == 'orb' or method == 'brisk':      # if our descriptor is ORB or BRISK
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=crossCheck)
+
+    return bf
+
+
+def matchKeyPointsBF(featureA, featureB, method):           # brute force matcher function
+    bf = createMatcher(method, crossCheck=True)
+
+    best_matches = bf.match(featureA, featureB)             # matching the keypoints
+
+    raw_matches = sorted(best_matches, key=lambda x:x.distance)         # sort matches according to their distance
+    print("Raw matches using Brute Force: ", len(raw_matches))          # calculate no. of raw matches
+    return raw_matches
+
+
+def matchKeyPointsKNN(featureA, featureB, ratio, method):   # K-Nearest neighbour matcher function
+    bf = createMatcher(method, crossCheck=False)
+
+    raw_matches = bf.knnMatch(featureA, featureB, 2)        # matching the keypoints
+    print("Raw matches using KNN: ", len(raw_matches))      # calculate no. of raw matches
+    matches = []                                            # creating an array
+
+    for m,n in raw_matches:
+        if m.distance < (n.distance * ratio):               # comparing the distance with allowable Lowe's ratio
+            matches.append(m)                               # append to array matches
+    return matches
+
+
+print(f"Using {feature_matching} feature matcher")
+
+fig = plt.figure(figsize=(20,8))                    # configure the plot size for figure
+
+if feature_matching == 'bf':                        # if we are using bf matcher
+    matches = matchKeyPointsBF(featureA, featureB, method=feature_extractor)
+    img3 = cv2.drawMatches(trainImg, kp1, queryImg, kp2, matches[:100], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+
+elif feature_matching == 'knn':                     # if we are using knn matcher
+    matches = matchKeyPointsKNN(featureA, featureB, ratio=0.75, method=feature_extractor)
+    img3 = cv2.drawMatches(trainImg, kp1, queryImg, kp2, np.random.choice(matches,100), None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+
+plt.imshow(img3)                                    # show matched keypoints in original images
+plt.show()
+
+hodl = input('hold')                                # just to make sure the window stay open
